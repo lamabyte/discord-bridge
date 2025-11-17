@@ -73,7 +73,7 @@ app.post('/discord/interactions', async (req, res) => {
 res.status(200).json({
   type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
   data: {
-    content: 'Got your file, updating the doc now…',
+    content: 'Got your file, updating database…',
     // 64 = ephemeral (only the command user sees it)
     flags: 64,
   },
@@ -98,4 +98,5 @@ res.status(200).json({
 app.listen(PORT, () => {
   console.log(`Discord bridge listening on port ${PORT}`);
 });
+
 
