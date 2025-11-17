@@ -1,5 +1,4 @@
 import express from 'express';
-import crypto from 'crypto';
 import nacl from 'tweetnacl';
 import bodyParser from 'body-parser';
 
@@ -13,16 +12,26 @@ app.use(bodyParser.json({
 }));
 
 const PORT = process.env.PORT || 3000;
-const DISCORD_PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY;   // from Dev Portal
-const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;         // your n8n webhook
+const DISCORD_PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY;  // from Dev Portal
+const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;        // your n8n webhook
 
 if (!DISCORD_PUBLIC_KEY || !N8N_WEBHOOK_URL) {
   console.error('Missing DISCORD_PUBLIC_KEY or N8N_WEBHOOK_URL env vars');
   process.exit(1);
 }
 
+// ---- Discord constants (per latest docs) ----
+const InteractionType = {
+  PING: 1,
+};
+
+const InteractionResponseType = {
+  PONG: 1,
+  DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE: 5,
+};
+
 // Simple health check
-app.get('/discord/health', (req, res) => {
+app.get('/discord/health', (_req, res) => {
   res.status(200).send('Discord bridge OK');
 });
 
@@ -31,7 +40,7 @@ function isValidRequest(req) {
   const signature = req.get('X-Signature-Ed25519');
   const timestamp = req.get('X-Signature-Timestamp');
 
-  if (!signature || !timestamp) return false;
+  if (!signature || !timestamp || !req.rawBody) return false;
 
   const message = Buffer.concat([
     Buffer.from(timestamp, 'utf8'),
@@ -54,35 +63,37 @@ app.post('/discord/interactions', async (req, res) => {
   const interaction = req.body;
 
   // 2) Handle PING (type 1) directly
-  if (interaction.type === 1) {
-    // PONG
-    return res.status(200).json({ type: 1 });
-  }
-
-  // 3) Forward everything else to n8n
-  try {
-    const response = await fetch(N8N_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(interaction),
+  if (interaction.type === InteractionType.PING) {
+    return res.status(200).json({
+      type: InteractionResponseType.PONG,
     });
-
-    const text = await response.text();
-
-    // If your n8n flow returns Discord-style JSON responses, you can:
-    // - forward them directly, or
-    // - just ACK here and let n8n handle follow-up messages via webhooks
-
-    if (response.headers.get('content-type')?.includes('application/json')) {
-      return res.status(response.status).type('application/json').send(text);
-    } else {
-      // Basic ACK so Discord doesn't time out (n8n can use follow-up webhooks)
-      return res.status(200).json({ type: 5 }); // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
-    }
-  } catch (err) {
-    console.error('Error forwarding to n8n:', err);
-    return res.status(500).send('error forwarding to n8n');
   }
+
+  // 3) IMMEDIATE ACK to Discord (deferred response)
+  //    This must happen within ~3 seconds to avoid the timeout banner.
+  res.status(200).json({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    data: {
+      content: 'Got your file, updating the doc now…',
+      // Uncomment to make this initial message ephemeral:
+      // flags: 64,
+    },
+  });
+
+  // 4) Fire-and-forget call to n8n in the background
+  //    n8n will do the heavy lifting and send the final message
+  //    via follow-up webhook using application_id + token.
+  (async () => {
+    try {
+      await fetch(N8N_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(interaction),
+      });
+    } catch (err) {
+      console.error('Error forwarding to n8n:', err);
+    }
+  })();
 });
 
 app.listen(PORT, () => {
