@@ -27,7 +27,7 @@ const InteractionType = {
 
 const InteractionResponseType = {
   PONG: 1,
-  DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE: 5,
+  CHANNEL_MESSAGE_WITH_SOURCE: 4,
 };
 
 // Simple health check
@@ -69,16 +69,15 @@ app.post('/discord/interactions', async (req, res) => {
     });
   }
 
-  // 3) IMMEDIATE ACK to Discord (deferred response)
-  //    This must happen within ~3 seconds to avoid the timeout banner.
-  res.status(200).json({
-    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-    data: {
-      content: 'Got your file, updating the doc now…',
-      // Uncomment to make this initial message ephemeral:
-      // flags: 64,
-    },
-  });
+  // 3) IMMEDIATE FINAL RESPONSE to Discord
+res.status(200).json({
+  type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+  data: {
+    content: 'Got your file, updating the doc now…',
+    // 64 = ephemeral (only the command user sees it)
+    flags: 64,
+  },
+});
 
   // 4) Fire-and-forget call to n8n in the background
   //    n8n will do the heavy lifting and send the final message
@@ -99,3 +98,4 @@ app.post('/discord/interactions', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Discord bridge listening on port ${PORT}`);
 });
+
