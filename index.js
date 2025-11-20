@@ -27,7 +27,7 @@ const InteractionType = {
 
 const InteractionResponseType = {
   PONG: 1,
-  CHANNEL_MESSAGE_WITH_SOURCE: 4,
+  DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE: 4,
 };
 
 // Simple health check
@@ -71,7 +71,7 @@ app.post('/discord/interactions', async (req, res) => {
 
   // 3) IMMEDIATE FINAL RESPONSE to Discord
 res.status(200).json({
-  type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+  type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
   data: {
     content: 'Processing…',
     // 64 = ephemeral (only the command user sees it)
@@ -98,6 +98,7 @@ res.status(200).json({
 app.listen(PORT, () => {
   console.log(`Discord bridge listening on port ${PORT}`);
 });
+
 
 
 
